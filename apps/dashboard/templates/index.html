@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Cloud Optimizer Dashboard</title>
+    <style>
+      :root {
+        --bg: #09121f;
+        --panel: #112036;
+        --text: #eaf2ff;
+        --muted: #8ea6c7;
+        --accent: #18c8a0;
+        --warn: #f59e0b;
+        --danger: #ef4444;
+      }
+      body {
+        margin: 0;
+        font-family: "Segoe UI", sans-serif;
+        background: radial-gradient(circle at 20% 20%, #17345a, var(--bg));
+        color: var(--text);
+      }
+      .wrap {
+        max-width: 1120px;
+        margin: 30px auto;
+        padding: 0 16px;
+      }
+      .card {
+        background: color-mix(in srgb, var(--panel) 92%, white 8%);
+        border: 1px solid #2f486b;
+        border-radius: 14px;
+        padding: 18px;
+      }
+      .controls {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        align-items: center;
+        margin: 14px 0;
+      }
+      .controls input[type="number"] {
+        width: 80px;
+        background: #0d1b2f;
+        color: var(--text);
+        border: 1px solid #2f486b;
+        border-radius: 8px;
+        padding: 6px 8px;
+      }
+      .controls button {
+        background: #0f7f69;
+        border: 0;
+        border-radius: 8px;
+        color: white;
+        padding: 7px 12px;
+        cursor: pointer;
+      }
+      .mode-badge {
+        font-size: 12px;
+        color: var(--muted);
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      th, td {
+        text-align: left;
+        padding: 10px;
+        border-bottom: 1px solid #284261;
+        font-size: 14px;
+      }
+      .risk-low { color: var(--accent); }
+      .risk-medium { color: var(--warn); }
+      .risk-high { color: var(--danger); }
+      .meta { color: var(--muted); font-size: 13px; margin-bottom: 10px; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <h1>Self-Optimizing Cloud Infrastructure AI</h1>
+      <div class="meta">Auto refresh every 5s</div>
+
+      <div class="controls card">
+        <strong>What-if</strong>
+        <label for="multiplier">Traffic Multiplier</label>
+        <input id="multiplier" type="range" min="0.5" max="3" step="0.1" value="1.3" />
+        <input id="multiplierNum" type="number" min="0.5" max="3" step="0.1" value="1.3" />
+        <button id="applyWhatIf">Apply</button>
+        <button id="normalMode">Normal</button>
+        <span id="modeBadge" class="mode-badge">Mode: normal</span>
+      </div>
+
+      <div class="card">
+        <table>
+          <thead>
+            <tr>
+              <th>Service</th>
+              <th>Current</th>
+              <th>Recommendation</th>
+              <th>Predicted RPS (30m)</th>
+              <th>Scenario RPS</th>
+              <th>Cost Delta</th>
+              <th>P95 Latency</th>
+              <th>Risk</th>
+            </tr>
+          </thead>
+          <tbody id="rows"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <script>
+      const rows = document.getElementById('rows');
+      const multiplier = document.getElementById('multiplier');
+      const multiplierNum = document.getElementById('multiplierNum');
+      const modeBadge = document.getElementById('modeBadge');
+      let mode = 'normal';
+
+      function riskClass(risk) {
+        return `risk-${risk || 'low'}`;
+      }
+
+      function syncMultiplier(value) {
+        multiplier.value = value;
+        multiplierNum.value = value;
+      }
+
+      async function load() {
+        try {
+          const limit = 12;
+          const endpoint = mode === 'what_if'
+            ? `/api/what_if?traffic_multiplier=${encodeURIComponent(multiplierNum.value)}&limit=${limit}`
+            : `/api/decisions?limit=${limit}`;
+
+          const res = await fetch(endpoint);
+          const data = await res.json();
+          rows.innerHTML = '';
+
+          (data.decisions || []).forEach((d) => {
+            if (d.error) {
+              rows.innerHTML += `<tr><td>${d.service}</td><td colspan="7">${d.error}</td></tr>`;
+              return;
+            }
+
+            const baseRps = d.scenario ? d.scenario.base_predicted_rps_30m : d.recommended.predicted_rps_30m;
+            const scenarioRps = d.scenario ? d.scenario.adjusted_predicted_rps_30m : '-';
+
+            rows.innerHTML += `
+              <tr>
+                <td>${d.service}</td>
+                <td>${d.current.nodes} x ${d.current.instance_type}</td>
+                <td>${d.recommended.nodes} x ${d.recommended.instance_type}</td>
+                <td>${baseRps}</td>
+                <td>${scenarioRps}</td>
+                <td>${d.impact.estimated_cost_delta_pct}%</td>
+                <td>${d.impact.estimated_p95_latency_ms} ms</td>
+                <td class="${riskClass(d.impact.risk)}">${d.impact.risk}</td>
+              </tr>
+            `;
+          });
+        } catch (err) {
+          console.error(err);
+        }
+      }
+
+      multiplier.addEventListener('input', (e) => syncMultiplier(e.target.value));
+      multiplierNum.addEventListener('input', (e) => syncMultiplier(e.target.value));
+
+      document.getElementById('applyWhatIf').addEventListener('click', () => {
+        mode = 'what_if';
+        modeBadge.textContent = `Mode: what-if x${Number(multiplierNum.value).toFixed(1)}`;
+        load();
+      });
+
+      document.getElementById('normalMode').addEventListener('click', () => {
+        mode = 'normal';
+        modeBadge.textContent = 'Mode: normal';
+        load();
+      });
+
+      load();
+      setInterval(load, 5000);
+    </script>
+  </body>
+</html>

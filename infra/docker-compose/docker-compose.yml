@@ -1,0 +1,129 @@
+services:
+  redpanda:
+    image: docker.redpanda.com/redpandadata/redpanda:v24.3.5
+    command:
+      - redpanda
+      - start
+      - --overprovisioned
+      - --smp
+      - "1"
+      - --memory
+      - "1G"
+      - --reserve-memory
+      - "0M"
+      - --node-id
+      - "0"
+      - --check=false
+      - --kafka-addr
+      - INTERNAL://0.0.0.0:9092,OUTSIDE://0.0.0.0:19092
+      - --advertise-kafka-addr
+      - INTERNAL://redpanda:9092,OUTSIDE://localhost:19092
+    ports:
+      - "19092:19092"
+
+  postgres:
+    image: timescale/timescaledb:2.17.2-pg16
+    environment:
+      POSTGRES_DB: optimizer
+      POSTGRES_USER: optimizer
+      POSTGRES_PASSWORD: optimizer
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+
+  prometheus:
+    image: prom/prometheus:v3.2.1
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+    ports:
+      - "9090:9090"
+    volumes:
+      - ../prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+
+  grafana:
+    image: grafana/grafana:11.5.2
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+
+  collector:
+    build:
+      context: ../../services/collector
+    environment:
+      DB_DSN: postgresql://optimizer:optimizer@postgres:5432/optimizer
+      KAFKA_BROKER: redpanda:9092
+      TELEMETRY_TOPIC: telemetry.raw
+    ports:
+      - "8001:8000"
+    depends_on:
+      - redpanda
+      - postgres
+
+  telemetry-simulator:
+    build:
+      context: ../../services/telemetry-simulator
+    environment:
+      COLLECTOR_URL: http://collector:8000
+      SIM_SERVICE_COUNT: "20"
+      SIM_NODE_COUNT: "50"
+      SIM_INTERVAL_SEC: "2"
+    ports:
+      - "8000:8000"
+    depends_on:
+      - collector
+
+  predictor:
+    build:
+      context: ../../services/predictor
+    volumes:
+      - ../../services/predictor/checkpoints:/app/checkpoints
+    environment:
+      DB_DSN: postgresql://optimizer:optimizer@postgres:5432/optimizer
+      COLLECTOR_URL: http://collector:8000
+      MODEL_PATH: /app/checkpoints/rps_lstm.pt
+    ports:
+      - "8002:8000"
+    depends_on:
+      - collector
+
+  optimizer:
+    build:
+      context: ../../services/optimizer
+    ports:
+      - "8003:8000"
+
+  simulator:
+    build:
+      context: ../../services/simulator
+    ports:
+      - "8004:8000"
+
+  decision:
+    build:
+      context: ../../services/decision
+    environment:
+      COLLECTOR_URL: http://collector:8000
+      PREDICTOR_URL: http://predictor:8000
+      OPTIMIZER_URL: http://optimizer:8000
+      SIMULATOR_URL: http://simulator:8000
+    ports:
+      - "8005:8000"
+    depends_on:
+      - predictor
+      - optimizer
+      - simulator
+
+  dashboard:
+    build:
+      context: ../../apps/dashboard
+    environment:
+      DECISION_URL: http://decision:8000
+    ports:
+      - "8080:8000"
+    depends_on:
+      - decision
+
+volumes:
+  pg_data:

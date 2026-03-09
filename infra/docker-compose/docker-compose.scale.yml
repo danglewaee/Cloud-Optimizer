@@ -1,0 +1,6 @@
+services:
+  telemetry-simulator:
+    environment:
+      SIM_SERVICE_COUNT: "200"
+      SIM_NODE_COUNT: "500"
+      SIM_INTERVAL_SEC: "1"
