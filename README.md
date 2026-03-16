@@ -1,4 +1,4 @@
-# Self-Optimizing Cloud Infrastructure AI (MVP -> Level C)
+# Self-Optimizing Cloud Infrastructure AI 
 
 MVP system that simulates cloud telemetry, predicts workload, recommends scaling actions, and visualizes cost/latency impact.
 
