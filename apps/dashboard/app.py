@@ -6,7 +6,10 @@ import httpx
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
-from 
+from fastapi import APIRouter 
+from app.db import database, engine, metadata
+
+router = APIRouter()
 
 app = FastAPI(title="dashboard")
 templates = Jinja2Templates(directory="templates")
