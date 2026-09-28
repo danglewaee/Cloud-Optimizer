@@ -123,7 +123,10 @@ def optimize(payload: OptimizeInput) -> dict[str, Any]:
         sum(x[i["type"]] * i["mem_gb"] for i in INSTANCE_CATALOG)
         >= required_pods * payload.pod_mem_gb / 0.85
     )
-
+    async def startup():
+        await database.connect()
+    async def shutdown():
+        await database.disconnect()
     # Spot node risk guardrail.
     spot_nodes_expr = sum(x[i["type"]] for i in INSTANCE_CATALOG if i["spot"])
     solver.Add(spot_nodes_expr <= payload.max_spot_ratio * total_nodes)
