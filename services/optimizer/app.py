@@ -96,8 +96,9 @@ def optimize(payload: OptimizeInput) -> dict[str, Any]:
             "utilization": None,
             "score": None,
         }
-
+    
     x: dict[str, pywraplp.Variable] = {}
+    y : dict[int, pywraplp.Variable] = {}
     for inst in INSTANCE_CATALOG:
         x[inst["type"]] = solver.IntVar(0, payload.max_nodes, f"x_{inst['type']}")
 
